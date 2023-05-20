@@ -161,13 +161,13 @@ const Home = () => {
           letterSpacing={'5px'}
           color={'myBlue.600'}
         >
-          FastGpt
+          MaiZiGpt
         </Box>
         <Box color={'myBlue.600'} fontSize={['30px', '50px']}>
-          三分钟
+        麦资Gpt-FastGpt
         </Box>
         <Box color={'myBlue.600'} fontSize={['30px', '50px']}>
-          搭建 AI 知识库
+        快速搭建自己的 AI 知识库
         </Box>
 
         <Button
@@ -193,7 +193,7 @@ const Home = () => {
             </Link>
           )}
 
-          <Box>Made by FastGpt Team.</Box>
+          <Box>Powered by Maizi.com .</Box>
         </Card>
       </Box>
     </Flex>

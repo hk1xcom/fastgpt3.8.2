@@ -129,25 +129,7 @@ const Navbar = () => {
             </Flex>
           </Tooltip>
         ))}
-      </Box>
-      <Box>
-        <Flex
-          mb={3}
-          flexDirection={'column'}
-          alignItems={'center'}
-          justifyContent={'center'}
-          cursor={'pointer'}
-          w={'60px'}
-          h={'45px'}
-          color={'#9096a5'}
-          _hover={{
-            color: '#ffffff'
-          }}
-          onClick={() => window.open('https://github.com/c121914yu/FastGPT')}
-        >
-          <MyIcon name={'git'} width={'22px'} height={'22px'} />
-        </Flex>
-      </Box>
+      </Box> 
     </Flex>
   );
 };
