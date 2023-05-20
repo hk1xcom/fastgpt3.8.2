@@ -141,11 +141,11 @@ const NumberSetting = () => {
             ml={5}
             onClick={() => window.open('https://www.mzc77.com/', '_blank')}
           >
-            openai账号购买
+            购买账号
           </Button>
           </Flex>
           <Box fontSize={'xs'} color={'blackAlpha.500'}>
-            如果填写了自己的 openai 账号，将不会计费
+            填写自己的openai账号，将不会计费丨点击账号购买即可获取属于自己的openaiKey
           </Box>
         </Box>
         <Flex mt={6} alignItems={'center'}>
