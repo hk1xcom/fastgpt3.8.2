@@ -26,8 +26,8 @@ const list = [
     link: '/openapi'
   },
   {
-    icon: 'fiSlack',
-    label: '支持：麦资网',
+
+    label: '支持我们"麦资网"',
     link: 'https://www.mzc77.com/'
   }
 ];
