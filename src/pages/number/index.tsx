@@ -128,16 +128,24 @@ const NumberSetting = () => {
               <strong>{userInfo?.balance}</strong> 元
             </Box>
             <Button
-              size={['xs', 'sm']}
-              w={['70px', '80px']}
-              ml={5}
-              onClick={() => setShowPay(true)}
-            >
-              充值
-            </Button>
+            size={['xs', 'sm']}
+            w={['70px', '80px']}
+            ml={5}
+            onClick={() => setShowPay(true)}
+          >
+            充值
+          </Button>
+          <Button
+            size={['xs', 'sm']}
+            w={['70px', '80px']}
+            ml={5}
+            onClick={() => window.open('https://www.mzc77.com/', '_blank')}
+          >
+            购买账号
+          </Button>
           </Flex>
           <Box fontSize={'xs'} color={'blackAlpha.500'}>
-            如果填写了自己的 openai 账号，将不会计费
+            填写自己的openai账号，将不会计费丨点击账号购买即可获取属于自己的openaiKey
           </Box>
         </Box>
         <Flex mt={6} alignItems={'center'}>

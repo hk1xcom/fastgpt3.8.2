@@ -26,9 +26,9 @@ const list = [
     link: '/openapi'
   },
   {
-    icon: 'git',
-    label: 'Git项目地址',
-    link: 'https://github.com/c121914yu/FastGPT'
+
+    label: '支持我们"麦资网"',
+    link: 'https://www.mzc77.com/'
   }
 ];
 
