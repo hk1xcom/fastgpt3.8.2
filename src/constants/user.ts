@@ -1,8 +1,7 @@
 export enum BillTypeEnum {
   chat = 'chat',
-  splitData = 'splitData',
+  openapiChat = 'openapiChat',
   QA = 'QA',
-  abstract = 'abstract',
   vector = 'vector',
   return = 'return'
 }
@@ -14,9 +13,8 @@ export enum PageTypeEnum {
 
 export const BillTypeMap: Record<`${BillTypeEnum}`, string> = {
   [BillTypeEnum.chat]: '对话',
-  [BillTypeEnum.splitData]: 'QA拆分',
+  [BillTypeEnum.openapiChat]: 'api 对话',
   [BillTypeEnum.QA]: 'QA拆分',
-  [BillTypeEnum.abstract]: '摘要总结',
   [BillTypeEnum.vector]: '索引生成',
   [BillTypeEnum.return]: '退款'
 };
@@ -29,6 +27,6 @@ export enum PromotionEnum {
 
 export const PromotionTypeMap = {
   [PromotionEnum.invite]: '好友充值',
-  [PromotionEnum.shareModel]: 'AI助手分享',
+  [PromotionEnum.shareModel]: '应用分享',
   [PromotionEnum.withdraw]: '提现'
 };

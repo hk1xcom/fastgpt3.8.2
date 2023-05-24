@@ -1,6 +1,6 @@
 import type { NextApiRequest } from 'next';
 import jwt from 'jsonwebtoken';
-import cookie from 'cookie';
+import Cookie from 'cookie';
 import { Chat, Model, OpenApi, User, ShareChat, KB } from '../mongo';
 import type { ModelSchema } from '@/types/mongoSchema';
 import type { ChatItemSimpleType } from '@/types/chat';
@@ -11,11 +11,10 @@ import { ERROR_ENUM } from '../errorCode';
 import { ChatModelType, OpenAiChatEnum } from '@/constants/model';
 import { hashPassword } from '@/service/utils/tools';
 
-/* 校验 token */
-export const authToken = (req: NextApiRequest): Promise<string> => {
+export const parseCookie = (cookie?: string): Promise<string> => {
   return new Promise((resolve, reject) => {
     // 获取 cookie
-    const cookies = cookie.parse(req.headers.cookie || '');
+    const cookies = Cookie.parse(cookie || '');
     const token = cookies.token;
 
     if (!token) {
@@ -34,7 +33,92 @@ export const authToken = (req: NextApiRequest): Promise<string> => {
   });
 };
 
-export const getOpenAiKey = () => {
+/* uniform auth user */
+export const authUser = async ({
+  req,
+  authToken = false,
+  authOpenApi = false,
+  authRoot = false,
+  authBalance = false
+}: {
+  req: NextApiRequest;
+  authToken?: boolean;
+  authOpenApi?: boolean;
+  authRoot?: boolean;
+  authBalance?: boolean;
+}) => {
+  const parseOpenApiKey = async (apiKey?: string) => {
+    if (!apiKey) {
+      return Promise.reject(ERROR_ENUM.unAuthorization);
+    }
+
+    try {
+      const openApi = await OpenApi.findOne({ apiKey });
+      if (!openApi) {
+        return Promise.reject(ERROR_ENUM.unAuthorization);
+      }
+      const userId = String(openApi.userId);
+
+      // 更新使用的时间
+      await OpenApi.findByIdAndUpdate(openApi._id, {
+        lastUsedTime: new Date()
+      });
+
+      return userId;
+    } catch (error) {
+      return Promise.reject(error);
+    }
+  };
+  const parseRootKey = async (rootKey?: string, userId = '') => {
+    if (!rootKey || !process.env.ROOT_KEY || rootKey !== process.env.ROOT_KEY) {
+      return Promise.reject(ERROR_ENUM.unAuthorization);
+    }
+    return userId;
+  };
+
+  const { cookie, apikey, rootkey, userid } = (req.headers || {}) as {
+    cookie?: string;
+    apikey?: string;
+    rootkey?: string;
+    userid?: string;
+  };
+
+  let uid = '';
+
+  if (authToken) {
+    uid = await parseCookie(cookie);
+  } else if (authOpenApi) {
+    uid = await parseOpenApiKey(apikey);
+  } else if (authRoot) {
+    uid = await parseRootKey(rootkey, userid);
+  } else if (cookie) {
+    uid = await parseCookie(cookie);
+  } else if (apikey) {
+    uid = await parseOpenApiKey(apikey);
+  } else if (rootkey) {
+    uid = await parseRootKey(rootkey, userid);
+  } else {
+    return Promise.reject(ERROR_ENUM.unAuthorization);
+  }
+
+  if (authBalance) {
+    const user = await User.findById(uid);
+    if (!user) {
+      return Promise.reject(ERROR_ENUM.unAuthorization);
+    }
+
+    if (!user.openaiKey && formatPrice(user.balance) <= 0) {
+      return Promise.reject(ERROR_ENUM.insufficientQuota);
+    }
+  }
+
+  return {
+    userId: uid
+  };
+};
+
+/* random get openai api key */
+export const getSystemOpenAiKey = () => {
   // 纯字符串类型
   const keys = process.env.OPENAIKEY?.split(',') || [];
   const i = Math.floor(Math.random() * keys.length);
@@ -59,7 +143,7 @@ export const getApiKey = async ({
   const keyMap = {
     [OpenAiChatEnum.GPT35]: {
       userOpenAiKey: user.openaiKey || '',
-      systemAuthKey: getOpenAiKey() as string
+      systemAuthKey: getSystemOpenAiKey() as string
     },
     [OpenAiChatEnum.GPT4]: {
       userOpenAiKey: user.openaiKey || '',
@@ -155,10 +239,10 @@ export const authChat = async ({
   req
 }: {
   modelId: string;
-  chatId: '' | string;
+  chatId?: string;
   req: NextApiRequest;
 }) => {
-  const userId = await authToken(req);
+  const { userId } = await authUser({ req, authToken: true });
 
   // 获取 model 数据
   const { model, showModelDetail } = await authModel({
@@ -248,32 +332,4 @@ export const authShareChat = async ({
     model,
     showModelDetail
   };
-};
-
-/* 校验 open api key */
-export const authOpenApiKey = async (req: NextApiRequest) => {
-  const { apikey: apiKey } = req.headers;
-
-  if (!apiKey) {
-    return Promise.reject(ERROR_ENUM.unAuthorization);
-  }
-
-  try {
-    const openApi = await OpenApi.findOne({ apiKey });
-    if (!openApi) {
-      return Promise.reject(ERROR_ENUM.unAuthorization);
-    }
-    const userId = String(openApi.userId);
-
-    // 更新使用的时间
-    await OpenApi.findByIdAndUpdate(openApi._id, {
-      lastUsedTime: new Date()
-    });
-
-    return {
-      userId
-    };
-  } catch (error) {
-    return Promise.reject(error);
-  }
 };

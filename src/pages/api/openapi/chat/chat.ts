@@ -1,18 +1,24 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { connectToDatabase } from '@/service/mongo';
-import { authOpenApiKey, authModel, getApiKey } from '@/service/utils/auth';
+import { authUser, authModel, getApiKey } from '@/service/utils/auth';
 import { modelServiceToolMap, resStreamResponse } from '@/service/utils/chat';
 import { ChatItemSimpleType } from '@/types/chat';
 import { jsonRes } from '@/service/response';
 import { ChatModelMap, ModelVectorSearchModeMap } from '@/constants/model';
 import { pushChatBill } from '@/service/events/pushBill';
-import { searchKb } from '@/service/plugins/searchKb';
 import { ChatRoleEnum } from '@/constants/chat';
 import { withNextCors } from '@/service/utils/tools';
+import { BillTypeEnum } from '@/constants/user';
+import { sensitiveCheck } from '@/service/api/text';
+import { NEW_CHATID_HEADER } from '@/constants/chat';
+import { Types } from 'mongoose';
+import { appKbSearch } from '../kb/appKbSearch';
 
 /* 发送提示词 */
 export default withNextCors(async function handler(req: NextApiRequest, res: NextApiResponse) {
-  let step = 0; // step=1时，表示开始了流响应
+  res.on('close', () => {
+    res.end();
+  });
   res.on('error', () => {
     console.log('error: ', 'request error');
     res.end();
@@ -45,7 +51,7 @@ export default withNextCors(async function handler(req: NextApiRequest, res: Nex
     let startTime = Date.now();
 
     /* 凭证校验 */
-    const { userId } = await authOpenApiKey(req);
+    const { userId } = await authUser({ req });
 
     const { model } = await authModel({
       userId,
@@ -61,35 +67,55 @@ export default withNextCors(async function handler(req: NextApiRequest, res: Nex
 
     const modelConstantsData = ChatModelMap[model.chat.chatModel];
 
+    let systemPrompts: {
+      obj: ChatRoleEnum;
+      value: string;
+    }[] = [];
+
     // 使用了知识库搜索
     if (model.chat.relatedKbs.length > 0) {
-      const similarity = ModelVectorSearchModeMap[model.chat.searchMode]?.similarity || 0.22;
-
-      const { code, searchPrompts } = await searchKb({
+      const { code, searchPrompts } = await appKbSearch({
         prompts,
-        similarity,
+        similarity: ModelVectorSearchModeMap[model.chat.searchMode]?.similarity,
         model,
         userId
       });
 
       // search result is empty
       if (code === 201) {
-        return res.send(searchPrompts[0]?.value);
+        return isStream
+          ? res.send(searchPrompts[0]?.value)
+          : jsonRes(res, {
+              data: searchPrompts[0]?.value,
+              message: searchPrompts[0]?.value
+            });
       }
-      prompts.splice(prompts.length - 3, 0, ...searchPrompts);
-    } else {
-      // 没有用知识库搜索，仅用系统提示词
-      model.chat.systemPrompt &&
-        prompts.splice(prompts.length - 3, 0, {
+
+      systemPrompts = searchPrompts;
+    } else if (model.chat.systemPrompt) {
+      systemPrompts = [
+        {
           obj: ChatRoleEnum.System,
           value: model.chat.systemPrompt
-        });
+        }
+      ];
     }
+
+    prompts.splice(prompts.length - 3, 0, ...systemPrompts);
+
+    // content check
+    await sensitiveCheck({
+      input: [...systemPrompts, prompts[prompts.length - 1]].map((item) => item.value).join('')
+    });
 
     // 计算温度
     const temperature = (modelConstantsData.maxTemperature * (model.chat.temperature / 10)).toFixed(
       2
     );
+
+    // get conversationId. create a newId if it is null
+    const conversationId = chatId || String(new Types.ObjectId());
+    !chatId && res?.setHeader(NEW_CHATID_HEADER, conversationId);
 
     // 发出请求
     const { streamResponse, responseMessages, responseText, totalTokens } =
@@ -99,49 +125,55 @@ export default withNextCors(async function handler(req: NextApiRequest, res: Nex
         messages: prompts,
         stream: isStream,
         res,
-        chatId
+        chatId: conversationId
       });
 
     console.log('api response time:', `${(Date.now() - startTime) / 1000}s`);
 
-    let textLen = 0;
-    let tokens = totalTokens;
+    if (res.closed) return res.end();
 
-    if (isStream) {
-      step = 1;
-      const { finishMessages, totalTokens } = await resStreamResponse({
-        model: model.chat.chatModel,
-        res,
-        chatResponse: streamResponse,
-        prompts
-      });
-      textLen = finishMessages.map((item) => item.value).join('').length;
-      tokens = totalTokens;
-    } else {
-      textLen = responseMessages.map((item) => item.value).join('').length;
-      jsonRes(res, {
-        data: responseText
-      });
-    }
+    const { textLen = 0, tokens = totalTokens } = await (async () => {
+      if (isStream) {
+        try {
+          const { finishMessages, totalTokens } = await resStreamResponse({
+            model: model.chat.chatModel,
+            res,
+            chatResponse: streamResponse,
+            prompts
+          });
+          res.end();
+          return {
+            textLen: finishMessages.map((item) => item.value).join('').length,
+            tokens: totalTokens
+          };
+        } catch (error) {
+          res.end();
+          console.log('error，结束', error);
+        }
+      } else {
+        jsonRes(res, {
+          data: responseText
+        });
+        return {
+          textLen: responseMessages.map((item) => item.value).join('').length
+        };
+      }
+      return {};
+    })();
 
     pushChatBill({
       isPay: true,
       chatModel: model.chat.chatModel,
       userId,
       textLen,
-      tokens
+      tokens,
+      type: BillTypeEnum.openapiChat
     });
   } catch (err: any) {
-    if (step === 1) {
-      // 直接结束流
-      res.end();
-      console.log('error，结束');
-    } else {
-      res.status(500);
-      jsonRes(res, {
-        code: 500,
-        error: err
-      });
-    }
+    res.status(500);
+    jsonRes(res, {
+      code: 500,
+      error: err
+    });
   }
 });

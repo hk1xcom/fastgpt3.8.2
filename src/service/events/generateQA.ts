@@ -4,11 +4,12 @@ import { OpenAiChatEnum } from '@/constants/model';
 import { pushSplitDataBill } from '@/service/events/pushBill';
 import { generateVector } from './generateVector';
 import { openaiError2 } from '../errorCode';
-import { PgClient } from '@/service/pg';
+import { insertKbItem } from '@/service/pg';
 import { SplitDataSchema } from '@/types/mongoSchema';
 import { modelServiceToolMap } from '../utils/chat';
 import { ChatRoleEnum } from '@/constants/chat';
 import { getErrText } from '@/utils/tools';
+import { BillTypeEnum } from '@/constants/user';
 
 export async function generateQA(next = false): Promise<any> {
   if (process.env.queueTask !== '1') {
@@ -98,7 +99,7 @@ A2:
             pushSplitDataBill({
               isPay: !userOpenAiKey && result.length > 0,
               userId: dataItem.userId,
-              type: 'QA',
+              type: BillTypeEnum.QA,
               textLen: responseMessages.map((item) => item.value).join('').length,
               totalTokens
             });
@@ -132,14 +133,10 @@ A2:
         textList: dataItem.textList.slice(0, -5)
       }),
       // 生成的内容插入 pg
-      PgClient.insert('modelData', {
-        values: resultList.map((item) => [
-          { key: 'user_id', value: dataItem.userId },
-          { key: 'kb_id', value: dataItem.kbId },
-          { key: 'q', value: item.q },
-          { key: 'a', value: item.a },
-          { key: 'status', value: 'waiting' }
-        ])
+      insertKbItem({
+        userId: dataItem.userId,
+        kbId: dataItem.kbId,
+        data: resultList
       })
     ]);
     console.log('生成QA成功，time:', `${(Date.now() - startTime) / 1000}s`);

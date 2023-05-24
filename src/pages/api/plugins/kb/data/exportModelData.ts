@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { jsonRes } from '@/service/response';
-import { connectToDatabase } from '@/service/mongo';
-import { authToken } from '@/service/utils/auth';
+import { connectToDatabase, User } from '@/service/mongo';
+import { authUser } from '@/service/utils/auth';
 import { PgClient } from '@/service/pg';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse<any>) {
@@ -14,10 +14,28 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
       throw new Error('缺少参数');
     }
 
-    // 凭证校验
-    const userId = await authToken(req);
-
     await connectToDatabase();
+
+    // 凭证校验
+    const { userId } = await authUser({ req, authToken: true });
+
+    const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
+
+    // auth export times
+    const authTimes = await User.findOne(
+      {
+        _id: userId,
+        $or: [
+          { 'limit.exportKbTime': { $exists: false } },
+          { 'limit.exportKbTime': { $lte: thirtyMinutesAgo } }
+        ]
+      },
+      '_id limit'
+    );
+
+    if (!authTimes) {
+      throw new Error('上次导出未到半小时，每半小时仅可导出一次。');
+    }
 
     // 统计数据
     const count = await PgClient.count('modelData', {
@@ -35,6 +53,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
       item.q.replace(/\n/g, '\\n'),
       item.a.replace(/\n/g, '\\n')
     ]);
+
+    // update export time
+    await User.findByIdAndUpdate(userId, {
+      'limit.exportKbTime': new Date()
+    });
 
     jsonRes(res, {
       data
