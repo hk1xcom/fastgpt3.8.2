@@ -154,20 +154,20 @@ const Home = () => {
         position={'absolute'}
         userSelect={'none'}
       >
-        <Image src="/icon/logo.png" w={['70px', '120px']} h={['70px', '120px']} alt={''}></Image>
+        <Image src="/icon/logo.gif" w={['70px', '120px']} h={['70px', '120px']} alt={''}></Image>
         <Box
           fontWeight={'bold'}
           fontSize={['40px', '70px']}
           letterSpacing={'5px'}
           color={'myBlue.600'}
         >
-          MaiZiGpt
+          DMGPT
+        </Box>
+        <Box color={'myBlue.600'} fontSize={['15px', '35px']}>
+        DMAI知识库
         </Box>
         <Box color={'myBlue.600'} fontSize={['30px', '50px']}>
-        麦资Gpt-FastGpt
-        </Box>
-        <Box color={'myBlue.600'} fontSize={['30px', '50px']}>
-        快速搭建自己的 AI 知识库
+        快速搭建自己的AI知识库
         </Box>
 
         <Button
@@ -193,7 +193,7 @@ const Home = () => {
             </Link>
           )}
 
-          <Box>Powered by Maizi.com .</Box>
+          <Box>Powered by 多米科技 .</Box>
         </Card>
       </Box>
     </Flex>

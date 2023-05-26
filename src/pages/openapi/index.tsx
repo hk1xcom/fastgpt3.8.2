@@ -54,10 +54,10 @@ const OpenApi = () => {
     <Box py={[5, 10]} px={'5vw'}>
       <Card px={6} py={4} position={'relative'}>
         <Box fontSize={'xl'} fontWeight={'bold'}>
-          MZ-FastGpt Api
+        DM-GPT Api
         </Box>
         <Box fontSize={'sm'} mt={2}>
-          MZ-astGpt Api 允许你将 MZ-Fast Gpt 的部分功能通过 api
+          DM-GPT Api 允许你将 DM-GPT 的部分功能通过 api
           的形式接入到自己的应用中，例如：飞书、企业微信、客服助手。请注意保管你的 Api
           Key，不要泄露！
         </Box>

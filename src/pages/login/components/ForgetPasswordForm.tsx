@@ -73,7 +73,7 @@ const RegisterForm = ({ setPageType, loginSuccess }: Props) => {
   return (
     <>
       <Box fontWeight={'bold'} fontSize={'2xl'} textAlign={'center'}>
-        找回 MZ-FastGPT 账号
+        找回 DM-GPT 账号
       </Box>
       <form onSubmit={handleSubmit(onclickFindPassword)}>
         <FormControl mt={5} isInvalid={!!errors.username}>

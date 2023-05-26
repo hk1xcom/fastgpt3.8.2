@@ -26,7 +26,7 @@ const list = [
     link: '/openapi'
   },
   {
-
+    icon: 'kb',
     label: '支持我们"麦资网"',
     link: 'https://www.mzc77.com/'
   }

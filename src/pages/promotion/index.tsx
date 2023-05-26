@@ -67,7 +67,7 @@ const OpenApi = () => {
           我的邀请
         </Box>
         <Box my={2} color={'blackAlpha.600'} fontSize={'sm'}>
-          你可以通过邀请链接邀请好友注册 FastGpt 账号。好友在 FastGpt
+          你可以通过邀请链接邀请好友注册 DMGpt 账号。好友在 DMGpt
           平台的每次充值，你都会获得一定比例的佣金。
         </Box>
         <Flex my={2} alignItems={'center'}>
@@ -159,7 +159,7 @@ const OpenApi = () => {
             <Box mt={2}>
               微信号:
               <Box as={'span'} userSelect={'all'}>
-                YNyiqi
+                xiaodongbiu
               </Box>
             </Box>
             <Box>发送你的邀请链接和需要提现的金额</Box>
