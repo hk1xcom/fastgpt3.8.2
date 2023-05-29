@@ -154,7 +154,7 @@ const Home = () => {
         position={'absolute'}
         userSelect={'none'}
       >
-        <Image src="/icon/logo.gif" w={['70px', '120px']} h={['70px', '120px']} alt={''}></Image>
+        <Image src="/icon/logo.png" w={['70px', '120px']} h={['70px', '120px']} alt={''}></Image>
         <Box
           fontWeight={'bold'}
           fontSize={['40px', '70px']}
