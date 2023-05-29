@@ -134,14 +134,6 @@ const NumberSetting = () => {
           >
             充值
           </Button>
-          <Button
-              size={['xs', 'sm']}
-              w={['70px', '80px']}
-              ml={5}
-              onClick={() => window.open('https://www.mzc77.com/', '_blank')}
-            >
-              购买账号
-          </Button>
           </Flex>
           <Box fontSize={'xs'} color={'blackAlpha.500'}>
             填写自己的openai账号，将不会计费丨点击购买账号即可获取属于自己的openaiKey
