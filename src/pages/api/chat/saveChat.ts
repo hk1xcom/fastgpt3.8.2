@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { jsonRes } from '@/service/response';
 import { ChatItemType } from '@/types/chat';
-import { connectToDatabase, Chat } from '@/service/mongo';
+import { connectToDatabase, Chat, Model } from '@/service/mongo';
 import { authModel } from '@/service/utils/auth';
 import { authUser } from '@/service/utils/auth';
 import mongoose from 'mongoose';
@@ -51,42 +51,51 @@ export async function saveChat({
   userId
 }: Props & { userId: string }) {
   await connectToDatabase();
-  await authModel({ modelId, userId, authOwner: false });
+  const { model } = await authModel({ modelId, userId, authOwner: false });
 
   const content = prompts.map((item) => ({
     _id: item._id ? new mongoose.Types.ObjectId(item._id) : undefined,
     obj: item.obj,
     value: item.value,
     systemPrompt: item.systemPrompt,
-    quote:
-      item.quote?.map((item) => ({
-        ...item,
-        isEdit: false
-      })) || []
+    quote: item.quote || []
   }));
 
-  // 没有 chatId, 创建一个对话
-  if (!chatId) {
-    const { _id } = await Chat.create({
-      _id: newChatId ? new mongoose.Types.ObjectId(newChatId) : undefined,
-      userId,
-      modelId,
-      content,
-      title: content[0].value.slice(0, 20),
-      latestChat: content[1].value
-    });
-    return _id;
-  } else {
-    // 已经有记录，追加入库
-    await Chat.findByIdAndUpdate(chatId, {
-      $push: {
-        content: {
-          $each: content
-        }
-      },
-      title: content[0].value.slice(0, 20),
-      latestChat: content[1].value,
-      updateTime: new Date()
-    });
-  }
+  const [id] = await Promise.all([
+    ...(chatId // update chat
+      ? [
+          Chat.findByIdAndUpdate(chatId, {
+            $push: {
+              content: {
+                $each: content
+              }
+            },
+            title: content[0].value.slice(0, 20),
+            latestChat: content[1].value,
+            updateTime: new Date()
+          }).then(() => '')
+        ]
+      : [
+          Chat.create({
+            _id: newChatId ? new mongoose.Types.ObjectId(newChatId) : undefined,
+            userId,
+            modelId,
+            content,
+            title: content[0].value.slice(0, 20),
+            latestChat: content[1].value
+          }).then((res) => res._id)
+        ]),
+    // update model
+    ...(String(model.userId) === userId
+      ? [
+          Model.findByIdAndUpdate(modelId, {
+            updateTime: new Date()
+          })
+        ]
+      : [])
+  ]);
+
+  return {
+    id
+  };
 }

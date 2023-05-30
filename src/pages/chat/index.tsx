@@ -36,7 +36,6 @@ import { streamFetch } from '@/api/fetch';
 import MyIcon from '@/components/Icon';
 import { throttle } from 'lodash';
 import { Types } from 'mongoose';
-import { LOGO_ICON } from '@/constants/chat';
 import { ChatModelMap } from '@/constants/model';
 import { useChatStore } from '@/store/chat';
 import { useLoading } from '@/hooks/useLoading';
@@ -49,6 +48,7 @@ import SideBar from '@/components/SideBar';
 import Avatar from '@/components/Avatar';
 import Empty from './components/Empty';
 import QuoteModal from './components/QuoteModal';
+import { HUMAN_ICON } from '@/constants/chat';
 
 const PhoneSliderBar = dynamic(() => import('./components/PhoneSliderBar'), {
   ssr: false
@@ -105,7 +105,7 @@ const Chat = ({ modelId, chatId }: { modelId: string; chatId: string }) => {
   const { copyData } = useCopyData();
   const { isPc } = useGlobalStore();
   const { Loading, setIsLoading } = useLoading();
-  const { userInfo } = useUserStore();
+  const { userInfo, loadMyModels } = useUserStore();
   const { isOpen: isOpenSlider, onClose: onCloseSlider, onOpen: onOpenSlider } = useDisclosure();
 
   // close contextMenu
@@ -211,8 +211,6 @@ const Chat = ({ modelId, chatId }: { modelId: string; chatId: string }) => {
         router.replace(`/chat?modelId=${modelId}&chatId=${newChatId}`);
       }
 
-      abortSignal.signal.aborted && (await delay(600));
-
       // 设置聊天内容为完成状态
       setChatData((state) => ({
         ...state,
@@ -228,13 +226,21 @@ const Chat = ({ modelId, chatId }: { modelId: string; chatId: string }) => {
         })
       }));
 
-      // refresh history
-      setTimeout(() => {
-        loadHistory({ pageNum: 1, init: true });
-        generatingMessage();
-      }, 100);
+      // refresh data
+      generatingMessage();
+      loadHistory({ pageNum: 1, init: true });
+      loadMyModels(true);
     },
-    [chatId, setForbidLoadChatData, generatingMessage, loadHistory, modelId, router, setChatData]
+    [
+      chatId,
+      modelId,
+      setChatData,
+      loadHistory,
+      loadMyModels,
+      generatingMessage,
+      setForbidLoadChatData,
+      router
+    ]
   );
 
   /**
@@ -291,7 +297,7 @@ const Chat = ({ modelId, chatId }: { modelId: string; chatId: string }) => {
     }, 100);
 
     try {
-      await gptChatPrompt(newChatList.slice(-2));
+      await gptChatPrompt(newChatList.slice(newChatList.length - 2));
     } catch (err: any) {
       toast({
         title: typeof err === 'string' ? err : err?.message || '聊天出错了~',
@@ -458,14 +464,14 @@ const Chat = ({ modelId, chatId }: { modelId: string; chatId: string }) => {
     async ({
       modelId,
       chatId,
-      isLoading = false
+      loading = false
     }: {
       modelId: string;
       chatId: string;
-      isLoading?: boolean;
+      loading?: boolean;
     }) => {
-      isLoading && setIsLoading(true);
       try {
+        loading && setIsLoading(true);
         const res = await getInitChatSiteInfo(modelId, chatId);
 
         setChatData({
@@ -500,18 +506,18 @@ const Chat = ({ modelId, chatId }: { modelId: string; chatId: string }) => {
       return null;
     },
     [
-      router,
-      loadHistory,
-      setForbidLoadChatData,
-      scrollToBottom,
-      setChatData,
       setIsLoading,
+      setChatData,
+      scrollToBottom,
+      setForbidLoadChatData,
+      router,
+      setLastChatModelId,
       setLastChatId,
-      setLastChatModelId
+      loadHistory
     ]
   );
   // 初始化聊天框
-  const { isLoading } = useQuery(['init', modelId, chatId], () => {
+  useQuery(['init', modelId, chatId], () => {
     // pc: redirect to latest model chat
     if (!modelId && lastChatModelId) {
       router.replace(`/chat?modelId=${lastChatModelId}&chatId=${lastChatId}`);
@@ -529,7 +535,8 @@ const Chat = ({ modelId, chatId }: { modelId: string; chatId: string }) => {
 
     return loadChatInfo({
       modelId,
-      chatId
+      chatId,
+      loading: true
     });
   });
 
@@ -704,8 +711,8 @@ const Chat = ({ modelId, chatId }: { modelId: string; chatId: string }) => {
                           className="avatar"
                           src={
                             item.obj === 'Human'
-                              ? userInfo?.avatar || '/icon/human.png'
-                              : chatData.model.avatar || LOGO_ICON
+                              ? userInfo?.avatar || HUMAN_ICON
+                              : chatData.model.avatar
                           }
                           w={['20px', '34px']}
                           h={['20px', '34px']}
@@ -874,7 +881,7 @@ const Chat = ({ modelId, chatId }: { modelId: string; chatId: string }) => {
             </Box>
           )}
 
-          <Loading loading={isLoading} fixed={false} />
+          <Loading fixed={false} />
         </Flex>
       )}
 

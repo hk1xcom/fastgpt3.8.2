@@ -1,4 +1,4 @@
-import React, { useCallback, useState, useRef } from 'react';
+import React, { useCallback, useState, useRef, useEffect } from 'react';
 import {
   Box,
   TableContainer,
@@ -22,7 +22,6 @@ import {
 import { QuestionOutlineIcon } from '@chakra-ui/icons';
 import type { BoxProps } from '@chakra-ui/react';
 import type { KbDataItemType } from '@/types/plugin';
-import { ModelDataStatusMap } from '@/constants/model';
 import { usePagination } from '@/hooks/usePagination';
 import {
   getKbDataList,
@@ -57,7 +56,7 @@ const DataCard = ({ kbId }: { kbId: string }) => {
   const { toast } = useToast();
 
   const {
-    data: modelDataList,
+    data: kbDataList,
     isLoading,
     Pagination,
     total,
@@ -73,11 +72,6 @@ const DataCard = ({ kbId }: { kbId: string }) => {
     defaultRequest: false
   });
 
-  useQuery(['getKbData', kbId], () => {
-    getData(1);
-    return null;
-  });
-
   const [editInputData, setEditInputData] = useState<InputDataType>();
 
   const {
@@ -91,9 +85,9 @@ const DataCard = ({ kbId }: { kbId: string }) => {
     onClose: onCloseSelectCsvModal
   } = useDisclosure();
 
-  const { data: { splitDataQueue = 0, embeddingQueue = 0 } = {}, refetch } = useQuery(
-    ['getModelSplitDataList'],
-    () => getTrainingData(kbId),
+  const { data: { qaListLen = 0, vectorListLen = 0 } = {}, refetch } = useQuery(
+    ['getModelSplitDataList', kbId],
+    () => getTrainingData({ kbId, init: false }),
     {
       onError(err) {
         console.log(err);
@@ -102,19 +96,13 @@ const DataCard = ({ kbId }: { kbId: string }) => {
   );
 
   const refetchData = useCallback(
-    (num = 1) => {
+    (num = pageNum) => {
       getData(num);
       refetch();
       return null;
     },
-    [getData, refetch]
+    [getData, pageNum, refetch]
   );
-
-  // interval get data
-  useQuery(['refetchData'], () => refetchData(pageNum), {
-    refetchInterval: 5000,
-    enabled: splitDataQueue > 0 || embeddingQueue > 0
-  });
 
   // get al data and export csv
   const { mutate: onclickExport, isLoading: isLoadingExport = false } = useMutation({
@@ -149,6 +137,17 @@ const DataCard = ({ kbId }: { kbId: string }) => {
     }
   });
 
+  // interval get data
+  useQuery(['refetchData'], () => refetchData(1), {
+    refetchInterval: 5000,
+    enabled: qaListLen > 0 || vectorListLen > 0
+  });
+  useQuery(['getKbData', kbId], () => {
+    setSearchText('');
+    getData(1);
+    return null;
+  });
+
   return (
     <Box position={'relative'}>
       <Flex>
@@ -161,7 +160,10 @@ const DataCard = ({ kbId }: { kbId: string }) => {
           variant={'outline'}
           mr={[2, 4]}
           size={'sm'}
-          onClick={() => refetchData(pageNum)}
+          onClick={() => {
+            refetchData(pageNum);
+            getTrainingData({ kbId, init: true });
+          }}
         />
         <Button
           variant={'outline'}
@@ -194,10 +196,10 @@ const DataCard = ({ kbId }: { kbId: string }) => {
         </Menu>
       </Flex>
       <Flex mt={4}>
-        {(splitDataQueue > 0 || embeddingQueue > 0) && (
+        {(qaListLen > 0 || vectorListLen > 0) && (
           <Box fontSize={'xs'}>
-            {splitDataQueue > 0 ? `${splitDataQueue}条数据正在拆分，` : ''}
-            {embeddingQueue > 0 ? `${embeddingQueue}条数据正在生成索引，` : ''}
+            {qaListLen > 0 ? `${qaListLen}条数据正在拆分，` : ''}
+            {vectorListLen > 0 ? `${vectorListLen}条数据正在生成索引，` : ''}
             请耐心等待...
           </Box>
         )}
@@ -237,20 +239,22 @@ const DataCard = ({ kbId }: { kbId: string }) => {
                 </Tooltip>
               </Th>
               <Th>补充知识</Th>
-              <Th>状态</Th>
+              <Th>来源</Th>
               <Th>操作</Th>
             </Tr>
           </Thead>
           <Tbody>
-            {modelDataList.map((item) => (
-              <Tr key={item.id}>
+            {kbDataList.map((item) => (
+              <Tr key={item.id} fontSize={'sm'}>
                 <Td>
                   <Box {...tdStyles.current}>{item.q}</Box>
                 </Td>
                 <Td>
                   <Box {...tdStyles.current}>{item.a || '-'}</Box>
                 </Td>
-                <Td>{ModelDataStatusMap[item.status]}</Td>
+                <Td maxW={'15%'} whiteSpace={'pre-wrap'} userSelect={'all'}>
+                  {item.source?.trim() || '-'}
+                </Td>
                 <Td>
                   <IconButton
                     mr={5}

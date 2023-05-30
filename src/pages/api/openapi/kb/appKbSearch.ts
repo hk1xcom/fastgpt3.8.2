@@ -5,15 +5,14 @@ import { PgClient } from '@/service/pg';
 import { withNextCors } from '@/service/utils/tools';
 import type { ChatItemSimpleType } from '@/types/chat';
 import type { ModelSchema } from '@/types/mongoSchema';
-import { ModelVectorSearchModeEnum } from '@/constants/model';
+import { appVectorSearchModeEnum } from '@/constants/model';
 import { authModel } from '@/service/utils/auth';
 import { ChatModelMap } from '@/constants/model';
 import { ChatRoleEnum } from '@/constants/chat';
 import { openaiEmbedding } from '../plugin/openaiEmbedding';
-import { ModelDataStatusEnum } from '@/constants/model';
 import { modelToolMap } from '@/utils/plugin';
 
-export type QuoteItemType = { id: string; q: string; a: string; isEdit: boolean };
+export type QuoteItemType = { id: string; q: string; a: string; source?: string };
 type Props = {
   prompts: ChatItemSimpleType[];
   similarity: number;
@@ -50,10 +49,11 @@ export default withNextCors(async function handler(req: NextApiRequest, res: Nex
     });
 
     const result = await appKbSearch({
+      model,
       userId,
-      prompts,
-      similarity,
-      model
+      fixedQuote: [],
+      prompt: prompts[prompts.length - 1],
+      similarity
     });
 
     jsonRes<Response>(res, {
@@ -71,74 +71,59 @@ export default withNextCors(async function handler(req: NextApiRequest, res: Nex
 export async function appKbSearch({
   model,
   userId,
-  prompts,
+  fixedQuote,
+  prompt,
   similarity
 }: {
-  userId: string;
-  prompts: ChatItemSimpleType[];
-  similarity: number;
   model: ModelSchema;
+  userId: string;
+  fixedQuote: QuoteItemType[];
+  prompt: ChatItemSimpleType;
+  similarity: number;
 }): Promise<Response> {
   const modelConstantsData = ChatModelMap[model.chat.chatModel];
 
-  // search two times.
-  const userPrompts = prompts.filter((item) => item.obj === 'Human');
-
-  const input: string[] = [
-    userPrompts[userPrompts.length - 1].value,
-    userPrompts[userPrompts.length - 2]?.value
-  ].filter((item) => item);
-
   // get vector
-  const promptVectors = await openaiEmbedding({
+  const promptVector = await openaiEmbedding({
     userId,
-    input
+    input: [prompt.value],
+    type: 'chat'
   });
 
   // search kb
-  const searchRes = await Promise.all(
-    promptVectors.map((promptVector) =>
-      PgClient.select<QuoteItemType>('modelData', {
-        fields: ['id', 'q', 'a'],
-        where: [
-          ['status', ModelDataStatusEnum.ready],
-          'AND',
-          `kb_id IN (${model.chat.relatedKbs.map((item) => `'${item}'`).join(',')})`,
-          'AND',
-          `vector <=> '[${promptVector}]' < ${similarity}`
-        ],
-        order: [{ field: 'vector', mode: `<=> '[${promptVector}]'` }],
-        limit: promptVectors.length === 1 ? 15 : 10
-      }).then((res) => res.rows)
-    )
-  );
+  const { rows: searchRes } = await PgClient.select<QuoteItemType>('modelData', {
+    fields: ['id', 'q', 'a', 'source'],
+    where: [
+      `kb_id IN (${model.chat.relatedKbs.map((item) => `'${item}'`).join(',')})`,
+      'AND',
+      `vector <=> '[${promptVector[0]}]' < ${similarity}`
+    ],
+    order: [{ field: 'vector', mode: `<=> '[${promptVector[0]}]'` }],
+    limit: 8
+  });
 
   // filter same search result
   const idSet = new Set<string>();
-  const filterSearch = searchRes.map((search) =>
-    search.filter((item) => {
-      if (idSet.has(item.id)) {
-        return false;
-      }
-      idSet.add(item.id);
-      return true;
-    })
-  );
+  const filterSearch = [
+    ...searchRes.slice(0, 3),
+    ...fixedQuote.slice(0, 2),
+    ...searchRes.slice(3),
+    ...fixedQuote.slice(2, 5)
+  ].filter((item) => {
+    if (idSet.has(item.id)) {
+      return false;
+    }
+    idSet.add(item.id);
+    return true;
+  });
 
-  // slice search result by rate.
-  const sliceRateMap: Record<number, number[]> = {
-    1: [1],
-    2: [0.7, 0.3]
-  };
-  const sliceRate = sliceRateMap[searchRes.length] || sliceRateMap[0];
   // 计算固定提示词的 token 数量
-
   const guidePrompt = model.chat.systemPrompt // user system prompt
     ? {
         obj: ChatRoleEnum.System,
         value: model.chat.systemPrompt
       }
-    : model.chat.searchMode === ModelVectorSearchModeEnum.noContext
+    : model.chat.searchMode === appVectorSearchModeEnum.noContext
     ? {
         obj: ChatRoleEnum.System,
         value: `知识库是关于"${model.name}"的内容,根据知识库内容回答问题.`
@@ -156,27 +141,24 @@ export async function appKbSearch({
   const fixedSystemTokens = modelToolMap[model.chat.chatModel].countTokens({
     messages: [guidePrompt]
   });
-  const maxTokens = modelConstantsData.systemMaxToken - fixedSystemTokens;
-  const sliceResult = sliceRate.map((rate, i) =>
-    modelToolMap[model.chat.chatModel]
-      .tokenSlice({
-        maxToken: Math.round(maxTokens * rate),
-        messages: filterSearch[i].map((item) => ({
-          obj: ChatRoleEnum.System,
-          value: `${item.q}\n${item.a}`
-        }))
-      })
-      .map((item) => item.value)
-  );
+  const sliceResult = modelToolMap[model.chat.chatModel]
+    .tokenSlice({
+      maxToken: modelConstantsData.systemMaxToken - fixedSystemTokens,
+      messages: filterSearch.map((item) => ({
+        obj: ChatRoleEnum.System,
+        value: `${item.q}\n${item.a}`
+      }))
+    })
+    .map((item) => item.value);
 
   // slice filterSearch
-  const sliceSearch = filterSearch.map((item, i) => item.slice(0, sliceResult[i].length)).flat();
+  const rawSearch = filterSearch.slice(0, sliceResult.length);
 
   //  system prompt
-  const systemPrompt = sliceResult.flat().join('\n').trim();
+  const systemPrompt = sliceResult.join('\n').trim();
 
   /* 高相似度+不回复 */
-  if (!systemPrompt && model.chat.searchMode === ModelVectorSearchModeEnum.hightSimilarity) {
+  if (!systemPrompt && model.chat.searchMode === appVectorSearchModeEnum.hightSimilarity) {
     return {
       code: 201,
       rawSearch: [],
@@ -190,7 +172,7 @@ export async function appKbSearch({
     };
   }
   /* 高相似度+无上下文，不添加额外知识,仅用系统提示词 */
-  if (!systemPrompt && model.chat.searchMode === ModelVectorSearchModeEnum.noContext) {
+  if (!systemPrompt && model.chat.searchMode === appVectorSearchModeEnum.noContext) {
     return {
       code: 200,
       rawSearch: [],
@@ -208,7 +190,7 @@ export async function appKbSearch({
 
   return {
     code: 200,
-    rawSearch: sliceSearch,
+    rawSearch,
     guidePrompt: guidePrompt.value || '',
     searchPrompts: [
       {

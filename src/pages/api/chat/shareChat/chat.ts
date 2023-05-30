@@ -47,7 +47,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         const { code, searchPrompts } = await appKbSearch({
           model,
           userId,
-          prompts,
+          fixedQuote: [],
+          prompt: prompts[prompts.length - 1],
           similarity: ModelVectorSearchModeMap[model.chat.searchMode]?.similarity
         });
 
@@ -74,7 +75,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.send(systemPrompts[0]?.value);
     }
 
-    prompts.splice(prompts.length - 3, 0, ...systemPrompts);
+    prompts.unshift(...systemPrompts);
 
     // content check
     await sensitiveCheck({
@@ -87,7 +88,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     );
 
     // 发出请求
-    const { streamResponse } = await modelServiceToolMap[model.chat.chatModel].chatCompletion({
+    const { streamResponse, responseMessages } = await modelServiceToolMap[
+      model.chat.chatModel
+    ].chatCompletion({
       apiKey: userOpenAiKey || systemAuthKey,
       temperature: +temperature,
       messages: prompts,
@@ -105,7 +108,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         model: model.chat.chatModel,
         res,
         chatResponse: streamResponse,
-        prompts
+        prompts: responseMessages
       });
 
       res.end();

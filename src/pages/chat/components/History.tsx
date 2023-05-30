@@ -16,14 +16,16 @@ import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'next/router';
 import { useLoading } from '@/hooks/useLoading';
 import { useUserStore } from '@/store/user';
-import { formatTimeToChatTime } from '@/utils/tools';
 import MyIcon from '@/components/Icon';
 import type { HistoryItemType, ExportChatType } from '@/types/chat';
 import { useChatStore } from '@/store/chat';
 import ModelList from './ModelList';
 import { useGlobalStore } from '@/store/global';
-
 import styles from '../index.module.scss';
+import { useEditInfo } from '@/hooks/useEditInfo';
+import { putChatHistory } from '@/api/chat';
+import { useToast } from '@/hooks/useToast';
+import { formatTimeToChatTime, getErrText } from '@/utils/tools';
 
 const PcSliderBar = ({
   onclickDelHistory,
@@ -33,11 +35,12 @@ const PcSliderBar = ({
   onclickExportChat: (type: ExportChatType) => void;
 }) => {
   const router = useRouter();
+  const { toast } = useToast();
   const { modelId = '', chatId = '' } = router.query as { modelId: string; chatId: string };
+  const ContextMenuRef = useRef(null);
+
   const theme = useTheme();
   const { isPc } = useGlobalStore();
-
-  const ContextMenuRef = useRef(null);
 
   const { Loading, setIsLoading } = useLoading();
   const [contextMenuData, setContextMenuData] = useState<{
@@ -52,7 +55,12 @@ const PcSliderBar = ({
     () => [...myModels, ...myCollectionModels],
     [myCollectionModels, myModels]
   );
-  useQuery(['loadModels'], () => loadMyModels(false));
+
+  // custom title edit
+  const { onOpenModal, EditModal: EditTitleModal } = useEditInfo({
+    title: '自定义历史记录标题',
+    placeholder: '如果设置为空，会自动跟随聊天记录。'
+  });
 
   // close contextMenu
   useOutsideClick({
@@ -60,12 +68,8 @@ const PcSliderBar = ({
     handler: () =>
       setTimeout(() => {
         setContextMenuData(undefined);
-      })
+      }, 10)
   });
-
-  const { isLoading: isLoadingHistory } = useQuery(['loadingHistory'], () =>
-    loadHistory({ pageNum: 1 })
-  );
 
   const onclickContextMenu = useCallback(
     (e: MouseEvent<HTMLDivElement>, history: HistoryItemType) => {
@@ -80,6 +84,12 @@ const PcSliderBar = ({
       });
     },
     [isPc]
+  );
+
+  useQuery(['loadModels'], () => loadMyModels(false));
+
+  const { isLoading: isLoadingHistory } = useQuery(['loadingHistory'], () =>
+    loadHistory({ pageNum: 1 })
   );
 
   return (
@@ -149,14 +159,16 @@ const PcSliderBar = ({
             borderLeft={['none', '5px solid transparent']}
             userSelect={'none'}
             _hover={{
-              backgroundColor: ['', '#dee0e3']
+              bg: ['', '#dee0e3']
             }}
             {...(item._id === chatId
               ? {
-                  backgroundColor: '#eff0f1',
+                  bg: 'myGray.100 !important',
                   borderLeftColor: 'myBlue.600 !important'
                 }
-              : {})}
+              : {
+                  bg: item.top ? 'myBlue.200' : ''
+                })}
             onClick={() => {
               if (item._id === chatId) return;
               if (isPc) {
@@ -218,6 +230,19 @@ const PcSliderBar = ({
             <MenuList>
               <MenuItem
                 onClick={async () => {
+                  try {
+                    await putChatHistory({
+                      chatId: contextMenuData.history._id,
+                      top: !contextMenuData.history.top
+                    });
+                    loadHistory({ pageNum: 1, init: true });
+                  } catch (error) {}
+                }}
+              >
+                {contextMenuData.history.top ? '取消置顶' : '置顶'}
+              </MenuItem>
+              <MenuItem
+                onClick={async () => {
                   setIsLoading(true);
                   try {
                     await onclickDelHistory(contextMenuData.history._id);
@@ -232,6 +257,33 @@ const PcSliderBar = ({
               >
                 删除记录
               </MenuItem>
+              <MenuItem
+                onClick={() =>
+                  onOpenModal({
+                    defaultVal: contextMenuData.history.title,
+                    onSuccess: async (val: string) => {
+                      await putChatHistory({
+                        chatId: contextMenuData.history._id,
+                        customTitle: val,
+                        top: contextMenuData.history.top
+                      });
+                      toast({
+                        title: '自定义标题成功',
+                        status: 'success'
+                      });
+                      loadHistory({ pageNum: 1, init: true });
+                    },
+                    onError(err) {
+                      toast({
+                        title: getErrText(err),
+                        status: 'error'
+                      });
+                    }
+                  })
+                }
+              >
+                自定义标题
+              </MenuItem>
               <MenuItem onClick={() => onclickExportChat('html')}>导出HTML格式</MenuItem>
               <MenuItem onClick={() => onclickExportChat('pdf')}>导出PDF格式</MenuItem>
               <MenuItem onClick={() => onclickExportChat('md')}>导出Markdown格式</MenuItem>
@@ -239,7 +291,7 @@ const PcSliderBar = ({
           </Menu>
         </Box>
       )}
-
+      <EditTitleModal />
       <Loading loading={isLoadingHistory} fixed={false} />
     </Flex>
   );

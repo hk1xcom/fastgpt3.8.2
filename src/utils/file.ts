@@ -1,6 +1,7 @@
 import mammoth from 'mammoth';
 import Papa from 'papaparse';
 import { getOpenAiEncMap } from './plugin/openai';
+import { getErrText } from './tools';
 
 /**
  * 读取 txt 文件内容
@@ -154,32 +155,39 @@ export const splitText_token = ({
   maxLen: number;
   slideLen: number;
 }) => {
-  const enc = getOpenAiEncMap()['gpt-3.5-turbo'];
-  // filter empty text. encode sentence
-  const encodeText = enc.encode(text);
+  try {
+    const enc = getOpenAiEncMap()['gpt-3.5-turbo'];
+    // filter empty text. encode sentence
+    const encodeText = enc.encode(text);
 
-  const chunks: string[] = [];
-  let tokens = 0;
+    const chunks: string[] = [];
+    let tokens = 0;
 
-  let startIndex = 0;
-  let endIndex = Math.min(startIndex + maxLen, encodeText.length);
-  let chunkEncodeArr = encodeText.slice(startIndex, endIndex);
+    let startIndex = 0;
+    let endIndex = Math.min(startIndex + maxLen, encodeText.length);
+    let chunkEncodeArr = encodeText.slice(startIndex, endIndex);
 
-  const decoder = new TextDecoder();
+    const decoder = new TextDecoder();
 
-  while (startIndex < encodeText.length) {
-    tokens += chunkEncodeArr.length;
-    chunks.push(decoder.decode(enc.decode(chunkEncodeArr)));
+    while (startIndex < encodeText.length) {
+      tokens += chunkEncodeArr.length;
+      chunks.push(decoder.decode(enc.decode(chunkEncodeArr)));
 
-    startIndex += maxLen - slideLen;
-    endIndex = Math.min(startIndex + maxLen, encodeText.length);
-    chunkEncodeArr = encodeText.slice(Math.min(encodeText.length - slideLen, startIndex), endIndex);
+      startIndex += maxLen - slideLen;
+      endIndex = Math.min(startIndex + maxLen, encodeText.length);
+      chunkEncodeArr = encodeText.slice(
+        Math.min(encodeText.length - slideLen, startIndex),
+        endIndex
+      );
+    }
+
+    return {
+      chunks,
+      tokens
+    };
+  } catch (err) {
+    throw new Error(getErrText(err));
   }
-
-  return {
-    chunks,
-    tokens
-  };
 };
 
 export const fileToBase64 = (file: File) => {
